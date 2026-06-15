@@ -1,20 +1,23 @@
 """
-main.py — Điểm chạy chính của AI agent khảo giá PC.
+main.py — Điểm chạy chính của AI agent khảo giá PC (Google Gemini).
 
 Quy trình mỗi lần chạy:
   1. Đọc cấu hình linh kiện (config.yaml).
-  2. Đọc lịch sử giá tuần trước (price_history.json) để so sánh tăng/giảm.
-  3. Với mỗi linh kiện, để AI tự tìm giá (và tự đề xuất hàng tương đương nếu cần).
-  4. Gửi báo cáo tổng hợp lên Lark.
-  5. Ghi lại snapshot giá tuần này.
+  2. Dựng "bối cảnh cấu hình tổng thể" để AI chọn hàng thay thế tương thích.
+  3. Đọc lịch sử giá tuần trước (price_history.json) để so sánh tăng/giảm.
+  4. Với mỗi linh kiện, để AI tự tìm giá (tự thử lại đến khi có kết quả).
+  5. Gửi báo cáo tổng hợp lên Lark.
+  6. Ghi lại snapshot giá tuần này.
 """
 
 import os
 import json
+import time
 import datetime
 
 import yaml
 from google import genai
+from google.genai import types
 
 from agent import price_component
 from reporter import send_lark_report
@@ -22,6 +25,7 @@ from reporter import send_lark_report
 CONFIG_PATH = "config.yaml"
 HISTORY_PATH = "price_history.json"
 MAX_SNAPSHOTS = 52
+PAUSE_BETWEEN = 2  # giây nghỉ nhẹ giữa các linh kiện
 
 
 def load_history() -> dict:
@@ -37,12 +41,22 @@ def save_history(history: dict) -> None:
         json.dump(history, f, ensure_ascii=False, indent=2)
 
 
+def build_context(components: list[dict]) -> str:
+    """Tạo mô tả cấu hình tổng thể để AI bảo đảm hàng thay thế tương thích."""
+    return "\n".join(f"- {c['query']}" for c in components)
+
+
 def main() -> None:
     with open(CONFIG_PATH, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     settings = config.get("settings", {})
-    client = genai.Client()  # đọc GEMINI_API_KEY từ môi trường
+    # Timeout dài hơn để tránh "Server disconnected" khi grounding chậm.
+    client = genai.Client(
+        http_options=types.HttpOptions(timeout=180_000)  # 180 giây (ms)
+    )
+
+    ctx = build_context(config["components"])
 
     history = load_history()
     last = history["snapshots"][-1] if history["snapshots"] else None
@@ -52,21 +66,19 @@ def main() -> None:
     total = 0
     snapshot_items: dict[str, int] = {}
 
-    for comp in config["components"]:
+    for idx, comp in enumerate(config["components"]):
         key, query = comp["key"], comp["query"]
         print(f"→ [{key}] {query}")
-        try:
-            data = price_component(client, query, settings)
-        except Exception as exc:  # noqa: BLE001
-            print(f"    LỖI gọi AI: {exc}")
-            results.append({"key": key, "query": query, "status": "error", "note": str(exc)})
-            continue
+        if idx > 0:
+            time.sleep(PAUSE_BETWEEN)
+
+        data = price_component(client, query, ctx, settings)
 
         price = data.get("price_vnd", 0)
         if not data.get("found") or price <= 0:
             results.append({"key": key, "query": query, "status": "not_found",
                             "note": data.get("note", "")})
-            print("    Không tìm thấy giá đáng tin cậy.")
+            print(f"    Không tìm thấy giá. {data.get('note','')}")
             continue
 
         line = {
