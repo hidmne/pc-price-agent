@@ -1,0 +1,40 @@
+# =====================================================================
+#  CẤU HÌNH AI AGENT KHẢO GIÁ PC  (Google Gemini)
+# ---------------------------------------------------------------------
+#  Bạn chỉ cần MÔ TẢ linh kiện bằng lời. AI sẽ tự tìm giá trên web (qua
+#  Google Search) và tự đề xuất hàng tương đương nếu model gốc ngừng bán.
+#  KHÔNG cần dán link sản phẩm.
+# =====================================================================
+
+settings:
+  # Mô hình AI làm bộ não. Lựa chọn:
+  #   gemini-3.5-flash        -> cân bằng tốt nhất, có grounding (khuyến nghị)
+  #   gemini-3.1-flash-lite   -> rẻ/nhanh hơn, suy luận đơn giản hơn
+  #   gemini-3.1-pro-preview  -> mạnh nhất, chỉ bản trả phí
+  model: "gemini-3.5-flash"
+
+# Danh sách linh kiện. Mô tả càng rõ (kèm hãng, model, thông số) càng chính xác.
+components:
+  - key: cpu
+    query: "CPU Intel Core i7-13700K (16 nhân 24 luồng), box chính hãng"
+
+  - key: main
+    query: "Bo mạch chủ MSI PRO Z790-A MAX WIFI DDR5"
+
+  - key: cooler
+    query: "Tản nhiệt nước AIO Thermalright Frozen Prism 360 Black ARGB"
+
+  - key: ram
+    query: "RAM Kingston Fury Beast 64GB (2x32GB) DDR5 5600MHz"
+
+  - key: ssd
+    query: "Ổ cứng SSD Samsung 980 Pro 1TB NVMe M.2 PCIe Gen4"
+
+  - key: vga
+    query: "Card màn hình MSI GeForce RTX 4060 Ventus 2X 8GB OC"
+
+  - key: psu
+    query: "Nguồn máy tính MSI MAG A850GL 850W 80 Plus Gold"
+
+  - key: case
+    query: "Vỏ case máy tính Montech Sky Two GX, hỗ trợ tản nhiệt tốt"
