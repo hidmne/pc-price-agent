@@ -11,7 +11,6 @@ Quy trình mỗi lần chạy:
 
 import os
 import json
-import time
 import datetime
 
 import yaml
@@ -19,13 +18,6 @@ from google import genai
 
 from agent import price_component
 from reporter import send_lark_report
-
-# Free tier giới hạn 10 request/phút cho gemini-3.5-flash.
-# Nghỉ 7 giây giữa các lần gọi = tối đa ~8 request/phút, an toàn.
-DELAY_BETWEEN_CALLS = 7  # giây
-
-# Tự thử lại khi bị rate limit (429), tối đa 3 lần, mỗi lần chờ lâu hơn.
-MAX_RETRIES = 3
 
 CONFIG_PATH = "config.yaml"
 HISTORY_PATH = "price_history.json"
@@ -60,34 +52,14 @@ def main() -> None:
     total = 0
     snapshot_items: dict[str, int] = {}
 
-    for idx, comp in enumerate(config["components"]):
+    for comp in config["components"]:
         key, query = comp["key"], comp["query"]
         print(f"→ [{key}] {query}")
-
-        # Nghỉ giữa các lần gọi để không vượt rate limit free tier.
-        if idx > 0:
-            print(f"    (chờ {DELAY_BETWEEN_CALLS}s...)")
-            time.sleep(DELAY_BETWEEN_CALLS)
-
-        # Thử lại tự động khi bị 429.
-        data = None
-        for attempt in range(1, MAX_RETRIES + 1):
-            try:
-                data = price_component(client, query, settings)
-                break
-            except Exception as exc:  # noqa: BLE001
-                err = str(exc)
-                if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                    wait = 30 * attempt  # 30s, 60s, 90s
-                    print(f"    Rate limit (lần {attempt}/{MAX_RETRIES}), chờ {wait}s...")
-                    time.sleep(wait)
-                else:
-                    print(f"    LỖI gọi AI: {err}")
-                    break
-
-        if data is None:
-            results.append({"key": key, "query": query, "status": "error",
-                            "note": "Vượt rate limit sau nhiều lần thử."})
+        try:
+            data = price_component(client, query, settings)
+        except Exception as exc:  # noqa: BLE001
+            print(f"    LỖI gọi AI: {exc}")
+            results.append({"key": key, "query": query, "status": "error", "note": str(exc)})
             continue
 
         price = data.get("price_vnd", 0)
